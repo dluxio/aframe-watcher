@@ -79,7 +79,85 @@ function updateFile (file, content, changes) {
     // Scan for ID in file.
     const regex = new RegExp(`<a-entity${filler}(${whitespace})id="${id}"${filler}>`);
     const match = regex.exec(content);
-    if (!match) { return; }
+    if (!match) {
+    const split = '></a-entity>'
+    const lastMatch = `<a-entity id="${id}"></a-entity>\n`
+    const idWhitespaceMatch = ' ';
+
+    const entityMatchIndex = content.indexOf('</a-scene');
+    if(entityMatchIndex == -1){return;}
+    const originalEntityString = lastMatch;
+    let entityString = lastMatch;
+      Object.keys(changes[id]).forEach(attribute => {
+      // Check if component is defined already.
+      const attributeRegex = new RegExp(`(${whitespace})${attribute}="(.*?)(;?)"`);
+      const attributeMatch = attributeRegex.exec(entityString);
+      const value = changes[id][attribute];
+
+      if (typeof value === 'string') {
+        // Single-property attribute match (e.g., position, rotation, scale).
+        if (attributeMatch) {
+          const whitespaceMatch = attributeMatch[1];
+          // Modify.
+          entityString = entityString.replace(
+            new RegExp(`${whitespaceMatch}${attribute}=".*?"`),
+            `${whitespaceMatch}${attribute}="${value}"`
+          );
+        } else {
+          // Add.
+          entityString = entityString.replace(
+            new RegExp(`${idWhitespaceMatch}id="${id}"`),
+            `${idWhitespaceMatch}id="${id}" ${attribute}="${value}"`
+          );
+        }
+      } else {
+        // Multi-property attribute match (e.g., material).
+        Object.keys(value).forEach(property => {
+          const attributeMatch = attributeRegex.exec(entityString);
+          const propertyValue = value[property];
+
+          if (attributeMatch) {
+            // Modify attribute.
+            let attributeString = attributeMatch[0];
+            const whitespaceMatch = attributeMatch[1];
+            const propertyRegex = new RegExp(`(${propertyDelimit})${property}:(.*?)([";])`);
+            propertyMatch = propertyRegex.exec(attributeMatch);
+
+            if (propertyMatch) {
+              // Modify property.
+              const propertyDelimitMatch = propertyMatch[1];
+              attributeString = attributeString.replace(
+                new RegExp(`${propertyDelimitMatch}${property}:(.*?)([";])`),
+                `${propertyDelimitMatch}${property}: ${propertyValue}${propertyMatch[3]}`
+              );
+            } else {
+              // Add property to existing.
+              attributeString = attributeString.replace(
+                new RegExp(`${whitespaceMatch}${attribute}="(.*?)(;?)"`),
+                `${whitespaceMatch}${attribute}="${attributeMatch[2]}${attributeMatch[3]}; ${property}: ${propertyValue}"`
+              );
+            }
+
+            // Update entity string with updated component.
+            entityString = entityString.replace(attributeMatch[0], attributeString);
+          } else {
+            // Add component entirely.
+            entityString = entityString.replace(
+              new RegExp(`${idWhitespaceMatch}id="${id}"`),
+              `${idWhitespaceMatch}id="${id}" ${attribute}="${property}: ${propertyValue}"`
+            );
+          }
+        });
+      }
+
+      console.log(`Built ${attribute} of #${id} in ${file}.`);
+    });
+    // Splice in updated entity string into file content.
+    content = content.substring(0, entityMatchIndex) +
+              entityString +
+              content.substring(entityMatchIndex,content.length);
+
+    } else {
 
     // Post-process regex to get only last occurence.
     const split = match[0].split('<a-entity');
@@ -161,6 +239,7 @@ function updateFile (file, content, changes) {
               entityString +
               content.substring(entityMatchIndex + originalEntityString.length,
                                 content.length);
+    }
   });
 
   return content;
